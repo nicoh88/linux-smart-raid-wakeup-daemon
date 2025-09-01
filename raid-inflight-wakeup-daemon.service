@@ -1,0 +1,12 @@
+[Unit]
+Description=RAID In-Flight IO Monitor and Parallel Spin-Up Daemon
+After=systemd-modules-load.service local-fs.target
+
+[Service]
+ExecStart=/usr/local/bin/raid-inflight-wakeup-daemon.sh
+Restart=always
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
