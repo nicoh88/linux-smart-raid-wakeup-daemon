@@ -45,7 +45,8 @@ This process is highly optimized to ensure that the wakeup commands for the slee
     -   Checks drive status in parallel to avoid bottlenecks.
     -   Only sends wakeup commands to drives that are actually sleeping.
     -   Bypasses the kernel's page cache using `iflag=direct` to guarantee a physical wakeup every time.
--   **Systemd Integration:** Runs as a reliable background service.
+    -   Prevents multiple instances from running via a lock file.
+-   **Systemd Integration:** Runs as a reliable background service with logging via `journalctl`.
 
 ## Installation
 
@@ -76,13 +77,12 @@ This process is highly optimized to ensure that the wakeup commands for the slee
 
 ## Usage
 
-The daemon runs automatically in the background. You can manage it using standard `systemctl` commands:
+The daemon runs automatically in the background. All output is logged to the systemd journal. You can manage it using standard `systemctl` commands:
 
--   **Check status and logs:**
+-   **Check status and live logs:**
     ```bash
     sudo systemctl status raid-inflight-wakeup-daemon.service
     journalctl -u raid-inflight-wakeup-daemon.service -f
-    tail -f /var/log/raid-inflight-wakeup.log
     ```
 -   **Stop the service:**
     ```bash

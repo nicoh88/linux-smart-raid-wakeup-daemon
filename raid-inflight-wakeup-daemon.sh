@@ -9,24 +9,8 @@ DISK_IDS=(
     "ata-WDC_WD80EFAX-68KNBN0_VDHLMYRD"
 )
 
-# Path for the log file
-LOG_FILE="/var/log/raid-inflight-wakeup.log"
-
 # Polling interval in seconds. A short interval is crucial for responsiveness.
 POLL_INTERVAL=0.2
-
-# --- Script Logic ---
-log_message() {
-    local message="$1"
-    # Formatted output with timestamp for log file
-    local formatted_message="$(date '+%Y-%m-%d %H:%M:%S') - ${message}"
-    
-    # Write to the log file
-    echo "${formatted_message}" >> "${LOG_FILE}"
-    
-    # Write to standard output (will be captured by systemd journal)
-    echo "${message}"
-}
 
 # --- Initialization & Mapping ---
 # Use a lock file to prevent multiple instances from running
@@ -38,13 +22,7 @@ fi
 echo $$ > "$LOCK_FILE"
 trap 'rm -f "$LOCK_FILE"' EXIT
 
-# Ensure log directory and file exist with correct permissions
-mkdir -p "$(dirname "$LOG_FILE")"
-touch "$LOG_FILE"
-chown root:root "$LOG_FILE"
-chmod 640 "$LOG_FILE"
-
-log_message "Daemon started. Mapping device IDs..."
+echo "Daemon started. Mapping device IDs..."
 
 declare -a DEVICES
 for id in "${DISK_IDS[@]}"; do
@@ -53,21 +31,21 @@ for id in "${DISK_IDS[@]}"; do
         device_path=$(readlink -f "$id_path")
         device_name=$(basename "$device_path")
         DEVICES+=("$device_name")
-        log_message "Mapping successful: ${id} -> ${device_name}"
+        echo "Mapping successful: ${id} -> ${device_name}"
     else
-        log_message "ERROR: Device ID ${id} not found or is not a symlink. Exiting."
+        echo "ERROR: Device ID ${id} not found or is not a symlink. Exiting."
         exit 1
     fi
 done
 
 if [ ${#DEVICES[@]} -eq 0 ]; then
-    log_message "ERROR: No valid devices found after mapping. Exiting."
+    echo "ERROR: No valid devices found after mapping. Exiting."
     exit 1
 fi
 
 # --- Final Wakeup Function with Parallel Probing ---
 wakeup_sleeping_drives() {
-    log_message "-> Starting parallel status checks and waking up sleeping drives..."
+    echo "-> Starting parallel status checks and waking up sleeping drives..."
     
     for dev in "${DEVICES[@]}"; do
         # Start a subshell in the background for each device
@@ -77,7 +55,7 @@ wakeup_sleeping_drives() {
             
             if echo "$status" | grep -q "standby"; then
                 # This message is only logged if the drive is sleeping
-                log_message "  - ${dev} is in standby. Sending wakeup command (dd with direct I/O)..."
+                echo "  - ${dev} is in standby. Sending wakeup command (dd with direct I/O)..."
                 dd if="/dev/$dev" of=/dev/null bs=512 count=1 status=none iflag=direct
             fi
         ) &
@@ -85,17 +63,17 @@ wakeup_sleeping_drives() {
     
     # Wait for all background subshells (the individual checks) to complete
     wait
-    log_message "-> Parallel wakeup routine finished."
+    echo "-> Parallel wakeup routine finished."
 }
 
 # --- Main Loop ---
-log_message "Monitoring started for devices: ${DEVICES[*]}"
+echo "Monitoring started for devices: ${DEVICES[*]}"
 
 while true; do
     for dev in "${DEVICES[@]}"; do
         # Read the number of read and write requests in the queue
         if ! read -r reads writes < "/sys/block/$dev/inflight"; then
-            log_message "Warning: Could not read inflight status for ${dev}. It might be offline."
+            echo "Warning: Could not read inflight status for ${dev}. It might be offline."
             # Wait a bit longer before retrying to avoid spamming logs if a drive is disconnected
             sleep 10 
             continue
@@ -103,12 +81,12 @@ while true; do
         
         # If the sum is greater than 0, the kernel has queued an I/O operation
         if [[ $((reads + writes)) -gt 0 ]]; then
-            log_message "In-flight request detected on ${dev} (${reads}r/${writes}w). Triggering wakeup."
+            echo "In-flight request detected on ${dev} (${reads}r/${writes}w). Triggering wakeup."
             
             wakeup_sleeping_drives
             
             # A longer pause after an action to let the system stabilize
-            log_message "Waiting 15 seconds after trigger..."
+            echo "Waiting 15 seconds after trigger..."
             sleep 15
             
             # Jump to the beginning of the outer while loop for a new round
